@@ -9,29 +9,30 @@ import {
     getAllUsers,
     getUserById,
     updateUserById,
-    deleteUserById
+    deleteUserById,
+    getUserStats
 } from "../controllers/users.controllers.js"
 import { verifyJWT, authorizeRoles } from "../middlewares/auth.middleware.js"
 
 const router = Router()
 
 // Public Routes
-router.route("/register").post(registerUser)
-router.route("/login").post(loginUser)
+router.post('/login', loginUser)
 
 // Secured Routes
-router.route("/logout").post(verifyJWT, logoutUser)
-router.route("/me").get(verifyJWT, getCurrentUser)
-router.route("/update-me").patch(verifyJWT, updateCurrentUser)
-router.route("/delete-me").delete(verifyJWT, deleteCurrentUser)
+router.post('/register', verifyJWT, authorizeRoles("ADMIN", "SUPER_ADMIN", "SUB_ADMIN"), registerUser)
+router.post("/logout", verifyJWT, logoutUser)
+router.get("/get-current-user", verifyJWT, getCurrentUser)
+router.patch("/update-current-user", verifyJWT, updateCurrentUser)
+router.delete("/delete-current-user", verifyJWT, deleteCurrentUser)
 
 // Admin/Moderator Routes (Example: restrict getAllUsers to admin)
-router.route("/").get(verifyJWT, authorizeRoles("admin"), getAllUsers)
+router.get("/get-all-users", verifyJWT, authorizeRoles("ADMIN", "SUPER_ADMIN", "SUB_ADMIN"), getAllUsers)
 
 // Specific ID Routes
-router.route("/:id")
-    .get(verifyJWT, getUserById)
-    .patch(verifyJWT, updateUserById)
-    .delete(verifyJWT, deleteUserById)
+router.get("/get-user-by-id/:id", verifyJWT, getUserById)
+router.patch("/update-user-by-id/:id", verifyJWT, updateUserById)
+router.delete("/delete-user-by-id/:id", verifyJWT, deleteUserById)
+router.get("/get-user-stats", verifyJWT, authorizeRoles("ADMIN", "SUPER_ADMIN", "SUB_ADMIN"), getUserStats)
 
 export default router

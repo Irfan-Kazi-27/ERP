@@ -32,4 +32,7 @@ app.use("/api/orders", orderRouter)
 app.use("/api/items", itemRouter)
 app.use("/api/dashboard", dashboardRouter)
 
+import { errorHandler } from "./middlewares/error.middleware.js"
+app.use(errorHandler)
+
 

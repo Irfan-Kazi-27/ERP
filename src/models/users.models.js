@@ -62,6 +62,9 @@ userSchema.methods.isPasswordCorrect = async function(password){
   return await bcrypt.compare(password,this.password)
 }
 
+userSchema.index({ name: "i" })
+userSchema.index({ role: 1, status: 1 })
+
 userSchema.methods.generateAccessToken = function(){
   return jwt.sign(
     {

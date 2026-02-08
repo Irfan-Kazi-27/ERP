@@ -29,7 +29,7 @@ const loginUser = async (email, password) => {
 
     const user = await User.findOne({ email })
     if (!user) throw new ApiError(404, "User Not Found")
-    
+
     const isPasswordValid = await user.isPasswordCorrect(password)
     if (!isPasswordValid) throw new ApiError(401, "Invalid Password")
 
@@ -66,20 +66,90 @@ const updateUserById = async (userId, updateData) => {
     return user
 }
 
+const ROLE_VISIBILITY = {
+    SUPER_ADMIN: {
+        canSee: ["SUPER_ADMIN", "ADMIN", "SUB_ADMIN", "STAFF"],
+        canDelete: ["ADMIN", "SUB_ADMIN", "STAFF"],
+    },
+    ADMIN: {
+        canSee: ["SUB_ADMIN", "STAFF"],
+        canDelete: ["STAFF"],
+    },
+    SUB_ADMIN: {
+        canSee: ["STAFF"],
+        canDelete: [],
+    },
+    STAFF: {
+        canSee: [],
+        canDelete: [],
+    }
+};
+
+// ... (other functions: registerUser, loginUser, getUserById, updateUserById - no changes needed)
+
 // Service: Delete user by ID
-const deleteUserById = async (userId) => {
-    const user = await User.findByIdAndDelete(userId)
+const deleteUserById = async (userId, requestingUserRole) => {
+    const user = await User.findById(userId)
     if (!user) {
         throw new ApiError(404, "User not found")
     }
+
+    const allowedToDelete = ROLE_VISIBILITY[requestingUserRole]?.canDelete || [];
+    if (!allowedToDelete.includes(user.role)) {
+        throw new ApiError(403, "You do not have permission to delete this user")
+    }
+
+    await User.findByIdAndDelete(userId)
     return user
 }
 
 // Service: Get all users
-const getAllUsers = async (filters = {}) => {
-    const users = await User.find(filters)
-    return users
-}
+const getAllUsers = async ({
+    search = "",
+    role,
+    status = "ACTIVE",
+    requestingUserRole
+}) => {
+
+    const visibleRoles = ROLE_VISIBILITY[requestingUserRole]?.canSee || [];
+
+    const query = {
+        status,
+        role: { $in: visibleRoles }
+    };
+
+    // Optional role filter from frontend (must be within visible roles)
+    if (role) {
+        if (visibleRoles.includes(role)) {
+            query.role = role;
+        } else {
+            return []; // Role not visible to user
+        }
+    }
+
+    // Search by name
+    if (search && search.trim() !== "") {
+        query.$text = { $search: search };
+    }
+
+    const users = await User
+        .find(query)
+        .select("name email role status isActive createdAt") // avoid sending password
+        .sort({ createdAt: -1 });
+
+    return users;
+};
+
+// Service: Get user stats (count of Staff and Sub Admin)
+const getUserStats = async () => {
+    const staffCount = await User.countDocuments({ role: 'STAFF', status: 'ACTIVE' });
+    const subAdminCount = await User.countDocuments({ role: 'SUB_ADMIN', status: 'ACTIVE' });
+
+    return {
+        staffCount,
+        subAdminCount
+    };
+};
 
 export {
     registerUser,
@@ -87,5 +157,6 @@ export {
     getUserById,
     updateUserById,
     deleteUserById,
-    getAllUsers
+    getAllUsers,
+    getUserStats
 }
