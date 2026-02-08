@@ -3,15 +3,21 @@ import { EmailLog } from "../models/emailLog.models.js";
 
 // Create transporter (configure with your email service)
 const createTransporter = () => {
-    return nodemailer.createTransport({
-        host: process.env.EMAIL_HOST || "smtp.gmail.com",
-        port: process.env.EMAIL_PORT || 587,
-        secure: false, // true for 465, false for other ports
-        auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASSWORD
-        }
-    });
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    console.error("Missing email credentials in .env file. Please set EMAIL_USER and EMAIL_PASSWORD.");
+    // We still return the transporter to allow the error to bubble up naturally from nodemailer if used,
+    // or we could throw here. Throwing here is clearer.
+    throw new Error("Missing email credentials. Please configure EMAIL_USER and EMAIL_PASSWORD in .env");
+  }
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || "smtp.gmail.com",
+    port: process.env.EMAIL_PORT || 587,
+    secure: false, // true for 465, false for other ports
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    }
+  });
 };
 
 /**
@@ -22,13 +28,13 @@ const createTransporter = () => {
  * @returns {Promise<Object>} - Email send result
  */
 export const sendQuotationEmail = async (quotation, clientEmail, ccEmails = []) => {
-    try {
-        const transporter = createTransporter();
+  try {
+    const transporter = createTransporter();
 
-        // Prepare email content
-        const subject = `Quotation ${quotation.quotationNo} - ${quotation.leadId.customer.companyName}`;
+    // Prepare email content
+    const subject = `Quotation ${quotation.quotationNo} - ${quotation.leadId.customer.companyName}`;
 
-        const htmlContent = `
+    const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #333;">Quotation Details</h2>
         <p>Dear ${quotation.leadId.customer.name},</p>
@@ -82,55 +88,55 @@ export const sendQuotationEmail = async (quotation, clientEmail, ccEmails = []) 
       </div>
     `;
 
-        // Send email
-        const mailOptions = {
-            from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-            to: clientEmail,
-            cc: ccEmails.length > 0 ? ccEmails.join(',') : undefined,
-            subject: subject,
-            html: htmlContent
-        };
+    // Send email
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      to: clientEmail,
+      cc: ccEmails.length > 0 ? ccEmails.join(',') : undefined,
+      subject: subject,
+      html: htmlContent
+    };
 
-        const info = await transporter.sendMail(mailOptions);
+    const info = await transporter.sendMail(mailOptions);
 
-        // Log email
-        await logEmail({
-            emailType: "QUOTATION",
-            recipient: clientEmail,
-            cc: ccEmails,
-            subject: subject,
-            body: htmlContent,
-            status: "SENT",
-            relatedTo: {
-                model: "Quotation",
-                id: quotation._id
-            }
-        });
+    // Log email
+    await logEmail({
+      emailType: "QUOTATION",
+      recipient: clientEmail,
+      cc: ccEmails,
+      subject: subject,
+      body: htmlContent,
+      status: "SENT",
+      relatedTo: {
+        model: "Quotation",
+        id: quotation._id
+      }
+    });
 
-        return {
-            success: true,
-            messageId: info.messageId,
-            sentTo: clientEmail,
-            cc: ccEmails
-        };
+    return {
+      success: true,
+      messageId: info.messageId,
+      sentTo: clientEmail,
+      cc: ccEmails
+    };
 
-    } catch (error) {
-        // Log failed email
-        await logEmail({
-            emailType: "QUOTATION",
-            recipient: clientEmail,
-            cc: ccEmails,
-            subject: `Quotation ${quotation.quotationNo}`,
-            status: "FAILED",
-            relatedTo: {
-                model: "Quotation",
-                id: quotation._id
-            },
-            error: error.message
-        });
+  } catch (error) {
+    // Log failed email
+    await logEmail({
+      emailType: "QUOTATION",
+      recipient: clientEmail || "UNKNOWN",
+      cc: ccEmails,
+      subject: `Quotation ${quotation.quotationNo}`,
+      status: "FAILED",
+      relatedTo: {
+        model: "Quotation",
+        id: quotation._id
+      },
+      error: error.message
+    });
 
-        throw error;
-    }
+    throw error;
+  }
 };
 
 /**
@@ -139,12 +145,12 @@ export const sendQuotationEmail = async (quotation, clientEmail, ccEmails = []) 
  * @returns {Promise<Object>} - Created email log
  */
 export const logEmail = async (emailData) => {
-    try {
-        const emailLog = await EmailLog.create(emailData);
-        return emailLog;
-    } catch (error) {
-        console.error("Error logging email:", error);
-        // Don't throw error, just log it
-        return null;
-    }
+  try {
+    const emailLog = await EmailLog.create(emailData);
+    return emailLog;
+  } catch (error) {
+    console.error("Error logging email:", error);
+    // Don't throw error, just log it
+    return null;
+  }
 };

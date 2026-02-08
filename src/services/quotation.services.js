@@ -19,8 +19,8 @@ export const createQuotation = async (leadId, quotationData, salesPersonId) => {
             throw new ApiError(404, "Lead not found");
         }
 
-        if (lead.status !== "ASSIGNED" && lead.status !== "FOLLOW_UP") {
-            throw new ApiError(400, `Cannot create quotation. Lead status: ${lead.status}`);
+        if (lead.status !== "QUALIFIED") {
+            throw new ApiError(400, `Cannot create quotation. Lead must be QUALIFIED. Current status: ${lead.status}`);
         }
 
         // Generate quotation number
@@ -76,7 +76,7 @@ export const createQuotation = async (leadId, quotationData, salesPersonId) => {
         const quotation = await Quotation.create({
             leadId,
             quotationNo,
-            salesPersonId,
+            salesPersonId: lead.assignedTo, // Use lead's assigned staff
             quotationItems,
             additionalCharges: quotationData.additionalCharges || [],
             discount: quotationData.discount,
@@ -86,6 +86,10 @@ export const createQuotation = async (leadId, quotationData, salesPersonId) => {
             validTill: quotationData.validTill,
             status: "CREATED"
         });
+
+        // Update lead status to QUOTATION_SENT
+        lead.status = "QUOTATION_SENT";
+        await lead.save();
 
         return await Quotation.findById(quotation._id)
             .populate('leadId')
@@ -107,7 +111,13 @@ export const createQuotation = async (leadId, quotationData, salesPersonId) => {
 export const sendQuotation = async (quotationId, ccEmails = []) => {
     try {
         const quotation = await Quotation.findById(quotationId)
-            .populate('leadId')
+            .populate({
+                path: 'leadId',
+                populate: {
+                    path: 'customer',
+                    model: 'Party'
+                }
+            })
             .populate('salesPersonId', 'name email')
             .populate('quotationItems.itemId', 'name description unit');
 
@@ -120,7 +130,11 @@ export const sendQuotation = async (quotationId, ccEmails = []) => {
         }
 
         // Send email
-        const clientEmail = quotation.leadId.customer.email;
+        const clientEmail = quotation.leadId?.customer?.email;
+        if (!clientEmail) {
+            throw new ApiError(400, "Customer email not found. Please ensure the customer associated with this lead has a valid email address.");
+        }
+
         await sendQuotationEmail(quotation, clientEmail, ccEmails);
 
         // Update quotation status
@@ -147,10 +161,23 @@ export const sendQuotation = async (quotationId, ccEmails = []) => {
  * @param {string} quotationId - Quotation ID
  * @returns {Promise<Object>} - Quotation details
  */
+// ... (previous imports)
+
+/**
+ * Get quotation by ID
+ * @param {string} quotationId - Quotation ID
+ * @returns {Promise<Object>} - Quotation details
+ */
 export const getQuotationById = async (quotationId) => {
     try {
         const quotation = await Quotation.findById(quotationId)
-            .populate('leadId')
+            .populate({
+                path: 'leadId',
+                populate: {
+                    path: 'customer',
+                    model: 'Party'
+                }
+            })
             .populate('salesPersonId', 'name email')
             .populate('quotationItems.itemId', 'name description unit');
 
@@ -166,25 +193,110 @@ export const getQuotationById = async (quotationId) => {
 };
 
 /**
- * Get all quotations for a lead
- * @param {string} leadId - Lead ID
- * @returns {Promise<Array>} - List of quotations
+ * Update quotation details
+ * @param {string} quotationId - Quotation ID
+ * @param {Object} updateData - Data to update
+ * @returns {Promise<Object>} - Updated quotation
  */
-export const getQuotationsByLead = async (leadId) => {
+export const updateQuotation = async (quotationId, updateData) => {
     try {
-        const quotations = await Quotation.find({ leadId })
-            .populate('salesPersonId', 'name email')
-            .populate('quotationItems.itemId', 'name description unit')
-            .sort({ createdAt: -1 });
+        const quotation = await Quotation.findById(quotationId);
+        if (!quotation) {
+            throw new ApiError(404, "Quotation not found");
+        }
 
-        return quotations;
+        if (quotation.status !== "CREATED" && quotation.status !== "DRAFT") {
+            throw new ApiError(400, `Cannot update quotation. Current status: ${quotation.status}`);
+        }
+
+        // Recalculate totals if items or charges change
+        let subtotal = 0;
+        const quotationItems = updateData.quotationItems ? updateData.quotationItems.map(item => {
+            const total = item.quantity * item.UnitPrice;
+            subtotal += total;
+            return {
+                ...item,
+                Total: total
+            };
+        }) : quotation.quotationItems;
+
+        // If items didn't change but we need subtotal for other calcs, recalculate from existing
+        if (!updateData.quotationItems) {
+            quotation.quotationItems.forEach(item => {
+                subtotal += item.Total;
+            });
+        }
+
+        // Calculate additional charges
+        let additionalChargesTotal = 0;
+        const additionalCharges = updateData.additionalCharges || quotation.additionalCharges;
+        if (additionalCharges && additionalCharges.length > 0) {
+            additionalCharges.forEach(charge => {
+                if (charge.type === "Fixed") {
+                    charge.amount = charge.value;
+                } else {
+                    charge.amount = (subtotal * charge.value) / 100;
+                }
+                additionalChargesTotal += charge.amount;
+            });
+        }
+
+        // Calculate discount
+        let discountAmount = 0;
+        const discount = updateData.discount || quotation.discount;
+        if (discount) {
+            if (discount.type === "Fixed") {
+                discountAmount = discount.value;
+            } else {
+                discountAmount = (subtotal * discount.value) / 100;
+            }
+            discount.amount = discountAmount;
+        }
+
+        // Calculate tax
+        let taxAmount = 0;
+        const amountBeforeTax = subtotal + additionalChargesTotal - discountAmount;
+        const tax = updateData.tax || quotation.tax;
+        if (tax) {
+            taxAmount = (amountBeforeTax * tax.percentage) / 100;
+            tax.amount = taxAmount;
+        }
+
+        // Calculate total amount
+        const totalAmount = amountBeforeTax + taxAmount;
+
+        // Update fields
+        quotation.quotationItems = quotationItems;
+        quotation.additionalCharges = additionalCharges;
+        quotation.discount = discount;
+        quotation.tax = tax;
+        quotation.totalAmount = totalAmount;
+        if (updateData.notes) quotation.notes = updateData.notes;
+        if (updateData.validTill) quotation.validTill = updateData.validTill;
+        if (updateData.leadId) quotation.leadId = updateData.leadId; // Should rarely change but possible
+
+        await quotation.save();
+
+        return await Quotation.findById(quotation._id)
+            .populate({
+                path: 'leadId',
+                populate: {
+                    path: 'customer',
+                    model: 'Party'
+                }
+            })
+            .populate('salesPersonId', 'name email')
+            .populate('quotationItems.itemId', 'name description unit');
+
     } catch (error) {
-        throw new ApiError(500, `Error fetching quotations: ${error.message}`);
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(500, `Error updating quotation: ${error.message}`);
     }
 };
 
 /**
  * Update quotation status
+ // ... (rest of file)
  * @param {string} quotationId - Quotation ID
  * @param {string} status - New status (APPROVED, REJECTED)
  * @returns {Promise<Object>} - Updated quotation
@@ -210,7 +322,7 @@ export const updateQuotationStatus = async (quotationId, status) => {
         // Update lead status
         if (status === "APPROVED") {
             await Lead.findByIdAndUpdate(quotation.leadId, {
-                status: "APPROVED_BY_CLIENT"
+                status: "QUOTATION_SENT"
             });
         }
 
@@ -222,5 +334,55 @@ export const updateQuotationStatus = async (quotationId, status) => {
     } catch (error) {
         if (error instanceof ApiError) throw error;
         throw new ApiError(500, `Error updating quotation status: ${error.message}`);
+    }
+};
+/**
+ * Get all quotations with filters
+ * @param {Object} filters - Filter criteria
+ * @param {Object} pagination - Pagination options
+ * @param {string} userId - Current user ID
+ * @param {string} userRole - Current user role
+ * @returns {Promise<Object>} - Quotations list
+ */
+export const getAllQuotations = async (filters = {}, pagination = {}, userId, userRole) => {
+    try {
+        const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = pagination;
+        const skip = (page - 1) * limit;
+
+        let query = {};
+
+        // Role-based filtering
+        if (userRole === "STAFF") {
+            query.salesPersonId = userId;
+        }
+
+        if (filters.status) {
+            query.status = filters.status;
+        }
+
+        const quotations = await Quotation.find(query)
+            .populate({
+                path: 'leadId',
+                populate: {
+                    path: 'customer',
+                    model: 'Party'
+                }
+            })
+            .populate('salesPersonId', 'name email')
+            .populate('quotationItems.itemId', 'name description unit')
+            .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        const total = await Quotation.countDocuments(query);
+
+        return {
+            quotations,
+            total,
+            page: parseInt(page),
+            pages: Math.ceil(total / limit)
+        };
+    } catch (error) {
+        throw new ApiError(500, `Error fetching quotations: ${error.message}`);
     }
 };

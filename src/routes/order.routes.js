@@ -11,15 +11,15 @@ router.use(verifyJWT);
 router.post("/convert/:quotationId", orderController.convertQuotationToOrder);
 
 // Get all orders
-router.get("/", orderController.getAllOrders);
+router.get("/getallorders", orderController.getAllOrders);
 
 // Get order by ID
-router.get("/:id", orderController.getOrderById);
+router.get("/getorderbyid/:id", orderController.getOrderById);
 
 // Update order status
-router.patch("/:id/status", orderController.updateOrderStatus);
+router.patch("/update-status/:id", orderController.updateOrderStatus);
 
 // Add PO to order
-router.patch("/:id/po", orderController.addPOToOrder);
+router.patch("/add-po/:id", orderController.addPOToOrder);
 
 export default router;

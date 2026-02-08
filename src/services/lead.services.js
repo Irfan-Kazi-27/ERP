@@ -1,6 +1,9 @@
 import { Lead } from "../models/leads.models.js";
+import { User } from "../models/users.models.js";
 import { generateLeadNumber } from "../utils/autoNumber.helper.js";
 import { ApiError } from "../utils/ApiError.js";
+
+import { findOrCreateParty } from "./party.services.js";
 
 /**
  * Create new lead
@@ -10,23 +13,98 @@ import { ApiError } from "../utils/ApiError.js";
  */
 export const createLead = async (leadData, createdBy) => {
     try {
+        let customerId;
+
+        // Handle Party Creation/Lookup
+        if (leadData.customerId) {
+            customerId = leadData.customerId;
+        } else if (leadData.customerData) {
+            const party = await findOrCreateParty(leadData.customerData, createdBy);
+            customerId = party._id;
+        } else {
+            throw new ApiError(400, "Customer ID or Customer Data is required");
+        }
+
         // Generate lead number
         const leadNo = await generateLeadNumber();
 
         // Create lead
         const lead = await Lead.create({
             ...leadData,
+            customer: customerId,
             leadNo,
             createdBy,
             status: "NEW"
         });
 
         return await Lead.findById(lead._id)
-            .populate('interestedIn.item', 'name description basePrice unit')
+            .populate('interestedIn.item', 'name description basePrice')
+            .populate('customer', 'name email contact companyName address')
             .populate('createdBy', 'name email');
 
     } catch (error) {
         throw new ApiError(500, `Error creating lead: ${error.message}`);
+    }
+};
+
+/**
+ * Update lead details
+ * @param {string} leadId - Lead ID
+ * @param {Object} updateData - Data to update
+ * @returns {Promise<Object>} - Updated lead
+ */
+export const updateLead = async (leadId, updateData) => {
+    try {
+        const lead = await Lead.findById(leadId);
+        if (!lead) {
+            throw new ApiError(404, "Lead not found");
+        }
+
+        // Only allow updates for active statuses (not REJECTED or LOST)
+        if (["REJECTED", "LOST"].includes(lead.status)) {
+            throw new ApiError(400, `Lead cannot be updated in current status: ${lead.status}`);
+        }
+
+        if (updateData.customer || updateData.customerId) lead.customer = updateData.customerId || updateData.customer;
+        if (updateData.source) lead.source = updateData.source;
+        if (updateData.interestedIn) lead.interestedIn = updateData.interestedIn;
+        if (updateData.remarks) lead.remarks = updateData.remarks;
+        if (updateData.status) lead.status = updateData.status;
+        if (updateData.assignedTo) lead.assignedTo = updateData.assignedTo;
+
+        await lead.save();
+
+        return await Lead.findById(leadId)
+            .populate('interestedIn.item', 'name description basePrice')
+            .populate('customer', 'name email contact companyName address')
+            .populate('createdBy', 'name email');
+
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(500, `Error updating lead: ${error.message}`);
+    }
+};
+
+/**
+ * Soft delete lead
+ * @param {string} leadId - Lead ID
+ * @returns {Promise<Object>} - Deleted lead
+ */
+export const deleteLead = async (leadId) => {
+    try {
+        const lead = await Lead.findById(leadId);
+        if (!lead) {
+            throw new ApiError(404, "Lead not found");
+        }
+
+        lead.isActive = false;
+        await lead.save();
+
+        return { message: "Lead deleted successfully" };
+
+    } catch (error) {
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(500, `Error deleting lead: ${error.message}`);
     }
 };
 
@@ -65,7 +143,8 @@ export const reviewLead = async (leadId, status, remarks, reviewedBy) => {
         await lead.save();
 
         return await Lead.findById(leadId)
-            .populate('interestedIn.item', 'name description basePrice unit')
+            .populate('interestedIn.item', 'name description basePrice')
+            .populate('customer', 'name email contact companyName address')
             .populate('createdBy', 'name email')
             .populate('reviewedBy', 'name email');
 
@@ -94,6 +173,22 @@ export const assignSalesPerson = async (leadId, salesPersonId, assignedBy, reaso
             throw new ApiError(400, `Lead must be approved before assignment. Current status: ${lead.status}`);
         }
 
+        // Validate sales person
+        const salesPerson = await User.findById(salesPersonId);
+        if (!salesPerson) {
+            throw new ApiError(404, "Sales person not found");
+        }
+
+        // Check if user has correct permissions (STAFF role)
+        // Note: You might want to allow other roles too, adjust as needed
+        if (salesPerson.role !== "STAFF") {
+            throw new ApiError(400, "Assigned user must be a sales person (STAFF role)");
+        }
+
+        if (!salesPerson.isActive) {
+            throw new ApiError(400, "Cannot assign to inactive user");
+        }
+
         // Add to assignment history
         lead.assignmentHistory.push({
             assignedTo: salesPersonId,
@@ -108,7 +203,8 @@ export const assignSalesPerson = async (leadId, salesPersonId, assignedBy, reaso
         await lead.save();
 
         return await Lead.findById(leadId)
-            .populate('interestedIn.item', 'name description basePrice unit')
+            .populate('interestedIn.item', 'name description basePrice')
+            .populate('customer', 'name email contact companyName address')
             .populate('createdBy', 'name email')
             .populate('reviewedBy', 'name email')
             .populate('assignedTo', 'name email')
@@ -129,7 +225,8 @@ export const assignSalesPerson = async (leadId, salesPersonId, assignedBy, reaso
 export const getLeadById = async (leadId) => {
     try {
         const lead = await Lead.findById(leadId)
-            .populate('interestedIn.item', 'name description basePrice unit')
+            .populate('interestedIn.item', 'name description basePrice')
+            .populate('customer', 'name email contact companyName address')
             .populate('createdBy', 'name email')
             .populate('reviewedBy', 'name email')
             .populate('assignedTo', 'name email')
@@ -165,8 +262,11 @@ export const getAllLeads = async (filters = {}, pagination = {}, userId, userRol
 
         // Role-based filtering
         if (userRole === "STAFF") {
-            // Sales person can only see assigned leads
-            query.assignedTo = userId;
+            // Sales person can see assigned leads OR leads created by them
+            query.$or = [
+                { assignedTo: userId },
+                { createdBy: userId }
+            ];
         }
 
         // Apply filters
@@ -203,7 +303,8 @@ export const getAllLeads = async (filters = {}, pagination = {}, userId, userRol
 
         // Execute query
         const leads = await Lead.find(query)
-            .populate('interestedIn.item', 'name description basePrice unit')
+            .populate('interestedIn.item', 'name description basePrice')
+            .populate('customer', 'name email contact companyName address')
             .populate('createdBy', 'name email')
             .populate('reviewedBy', 'name email')
             .populate('assignedTo', 'name email')
@@ -251,11 +352,31 @@ export const updateLeadStatus = async (leadId, status) => {
             throw new ApiError(404, "Lead not found");
         }
 
+        // Validate Status Transitions
+        const VALID_TRANSITIONS = {
+            NEW: ["APPROVED", "REJECTED"],
+            APPROVED: ["ASSIGNED", "REJECTED"], // Added REJECTED just in case
+            ASSIGNED: ["FOLLOW_UP", "CLIENT_APPROVAL_PENDING", "REJECTED"],
+            FOLLOW_UP: ["CLIENT_APPROVAL_PENDING", "REJECTED", "CONVERTED_TO_ORDER"],
+            CLIENT_APPROVAL_PENDING: ["APPROVED_BY_CLIENT", "FOLLOW_UP", "REJECTED"],
+            APPROVED_BY_CLIENT: ["CONVERTED_TO_ORDER", "REJECTED"],
+            REJECTED: [], // Terminal state
+            CONVERTED_TO_ORDER: [] // Terminal state
+        };
+
+        // Allow admin override or strict validation? 
+        // For now, strict validation helps prevent logic errors
+        if (!VALID_TRANSITIONS[lead.status]?.includes(status)) {
+            // Optional: bypass for ADMIN if needed, but safer to enforce flow
+            throw new ApiError(400, `Invalid status transition from ${lead.status} to ${status}`);
+        }
+
         lead.status = status;
         await lead.save();
 
         return await Lead.findById(leadId)
-            .populate('interestedIn.item', 'name description basePrice unit')
+            .populate('interestedIn.item', 'name description basePrice')
+            .populate('customer', 'name email contact companyName address')
             .populate('createdBy', 'name email')
             .populate('reviewedBy', 'name email')
             .populate('assignedTo', 'name email');
@@ -263,5 +384,45 @@ export const updateLeadStatus = async (leadId, status) => {
     } catch (error) {
         if (error instanceof ApiError) throw error;
         throw new ApiError(500, `Error updating lead status: ${error.message}`);
+    }
+};
+/**
+ * Get lead stats (counts)
+ * @param {string} userId - User ID
+ * @param {string} userRole - User Role
+ * @returns {Promise<Object>} - Lead stats
+ */
+export const getLeadStats = async (userId, userRole) => {
+    try {
+        let query = { isActive: true };
+
+        if (userRole === "STAFF") {
+            query.assignedTo = userId;
+        }
+
+        const stats = await Lead.aggregate([
+            { $match: query },
+            {
+                $group: {
+                    _id: "$status",
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        const totalLeads = await Lead.countDocuments(query);
+
+        // Convert stats array to object
+        const statusCounts = stats.reduce((acc, curr) => {
+            acc[curr._id] = curr.count;
+            return acc;
+        }, {});
+
+        return {
+            totalLeads,
+            statusCounts
+        };
+    } catch (error) {
+        throw new ApiError(500, `Error fetching lead stats: ${error.message}`);
     }
 };

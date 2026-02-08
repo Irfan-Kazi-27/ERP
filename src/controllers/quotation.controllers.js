@@ -88,6 +88,31 @@ export const getQuotationsByLead = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Update quotation
+ * PUT /api/quotations/:id
+ */
+export const updateQuotation = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { quotationItems, additionalCharges, discount, tax, notes, validTill, leadId } = req.body;
+
+    const updateData = {
+        quotationItems,
+        additionalCharges,
+        discount,
+        tax,
+        notes,
+        validTill,
+        leadId
+    };
+
+    const quotation = await quotationService.updateQuotation(id, updateData);
+
+    return res.status(200).json(
+        new ApiResponse(200, quotation, "Quotation updated successfully")
+    );
+});
+
+/**
  * Update quotation status
  * PATCH /api/quotations/:id/status
  */
@@ -103,5 +128,20 @@ export const updateQuotationStatus = asyncHandler(async (req, res) => {
 
     return res.status(200).json(
         new ApiResponse(200, quotation, "Quotation status updated successfully")
+    );
+});
+/**
+ * Get all quotations
+ * GET /api/quotations
+ */
+export const getAllQuotations = asyncHandler(async (req, res) => {
+    const { status, page, limit, sortBy, sortOrder } = req.query;
+    const filters = { status };
+    const pagination = { page, limit, sortBy, sortOrder };
+
+    const result = await quotationService.getAllQuotations(filters, pagination, req.user._id, req.user.role);
+
+    return res.status(200).json(
+        new ApiResponse(200, result, "Quotations fetched successfully")
     );
 });

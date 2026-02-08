@@ -8,18 +8,24 @@ const router = Router();
 router.use(verifyJWT);
 
 // Create quotation
-router.post("/", quotationController.createQuotation);
+router.post("/createquotation", quotationController.createQuotation);
+
+// Get all quotations
+router.get("/get-all-quotations", quotationController.getAllQuotations);
 
 // Get quotations by lead
-router.get("/lead/:leadId", quotationController.getQuotationsByLead);
+router.get("/getquotationsbylead/:leadId", quotationController.getQuotationsByLead);
 
 // Get quotation by ID
-router.get("/:id", quotationController.getQuotationById);
+router.get("/getquotationbyid/:id", quotationController.getQuotationById);
 
 // Send quotation email
-router.post("/:id/send", quotationController.sendQuotationEmail);
+router.post("/sendquotationemail/:id", quotationController.sendQuotationEmail);
 
 // Update quotation status
-router.patch("/:id/status", quotationController.updateQuotationStatus);
+router.patch("/updatequotationstatus/:id", quotationController.updateQuotationStatus);
+
+// Update quotation details
+router.put("/updatequotation/:id", quotationController.updateQuotation);
 
 export default router;

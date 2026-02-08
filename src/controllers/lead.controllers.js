@@ -8,11 +8,17 @@ import * as leadService from "../services/lead.services.js";
  * POST /api/leads
  */
 export const createLead = asyncHandler(async (req, res) => {
-    const { customer, source, interestedIn, remarks } = req.body;
+    const { customerId, customerData, source, interestedIn, remarks } = req.body;
 
     // Validation
-    if (!customer || !customer.name || !customer.contact || !customer.email || !customer.companyName || !customer.address) {
-        throw new ApiError(400, "All customer fields are required");
+    if (!customerId && !customerData) {
+        throw new ApiError(400, "Customer information (ID or Data) is required");
+    }
+
+    if (customerData) {
+        if (!customerData.name || !customerData.contact || !customerData.email || !customerData.companyName || !customerData.address) {
+            throw new ApiError(400, "All customer fields are required for new customers");
+        }
     }
 
     if (!source) {
@@ -23,8 +29,19 @@ export const createLead = asyncHandler(async (req, res) => {
         throw new ApiError(400, "At least one interested item is required");
     }
 
+    // Validate items have quantity
+    for (const item of interestedIn) {
+        if (!item.item || !item.quantity) {
+            throw new ApiError(400, "Each interested item must have an item ID and quantity");
+        }
+        if (item.quantity < 1) {
+            throw new ApiError(400, "Quantity must be at least 1");
+        }
+    }
+
     const leadData = {
-        customer,
+        customerId,
+        customerData,
         source,
         interestedIn,
         remarks
@@ -82,6 +99,50 @@ export const assignSalesPerson = asyncHandler(async (req, res) => {
 
     return res.status(200).json(
         new ApiResponse(200, lead, "Sales person assigned successfully")
+    );
+});
+
+/**
+ * Update lead
+ * PATCH /api/leads/:id
+ */
+export const updateLead = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    // Validate interestedIn if present
+    if (updateData.interestedIn) {
+        if (updateData.interestedIn.length === 0) {
+            throw new ApiError(400, "At least one interested item is required");
+        }
+        for (const item of updateData.interestedIn) {
+            if (!item.item || !item.quantity) {
+                throw new ApiError(400, "Each interested item must have an item ID and quantity");
+            }
+            if (item.quantity < 1) {
+                throw new ApiError(400, "Quantity must be at least 1");
+            }
+        }
+    }
+
+    const lead = await leadService.updateLead(id, updateData);
+
+    return res.status(200).json(
+        new ApiResponse(200, lead, "Lead updated successfully")
+    );
+});
+
+/**
+ * Delete lead
+ * DELETE /api/leads/:id
+ */
+export const deleteLead = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+
+    const result = await leadService.deleteLead(id);
+
+    return res.status(200).json(
+        new ApiResponse(200, result, "Lead deleted successfully")
     );
 });
 
@@ -150,5 +211,16 @@ export const updateLeadStatus = asyncHandler(async (req, res) => {
 
     return res.status(200).json(
         new ApiResponse(200, lead, "Lead status updated successfully")
+    );
+});
+/**
+ * Get lead stats
+ * GET /api/leads/stats
+ */
+export const getLeadStats = asyncHandler(async (req, res) => {
+    const stats = await leadService.getLeadStats(req.user._id, req.user.role);
+
+    return res.status(200).json(
+        new ApiResponse(200, stats, "Lead stats fetched successfully")
     );
 });

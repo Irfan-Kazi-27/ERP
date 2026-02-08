@@ -8,17 +8,16 @@ import * as itemService from "../services/item.services.js";
  * POST /api/items
  */
 export const createItem = asyncHandler(async (req, res) => {
-    const { name, description, basePrice, unit } = req.body;
+    const { name, description, basePrice } = req.body;
 
-    if (!name || !description || !basePrice || !unit) {
+    if (!name || !description || !basePrice) {
         throw new ApiError(400, "All fields are required");
     }
 
     const itemData = {
         name,
         description,
-        basePrice,
-        unit
+        basePrice
     };
 
     const item = await itemService.createItem(itemData);

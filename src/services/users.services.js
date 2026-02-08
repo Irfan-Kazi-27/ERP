@@ -80,7 +80,7 @@ const ROLE_VISIBILITY = {
         canDelete: [],
     },
     STAFF: {
-        canSee: [],
+        canSee: ["STAFF"],
         canDelete: [],
     }
 };

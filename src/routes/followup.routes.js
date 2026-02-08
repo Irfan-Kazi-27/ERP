@@ -8,7 +8,7 @@ const router = Router();
 router.use(verifyJWT);
 
 // Create follow-up
-router.post("/", followupController.createFollowup);
+router.post("/createfollowup", followupController.createFollowup);
 
 // Get upcoming follow-ups
 router.get("/upcoming", followupController.getUpcomingFollowups);
@@ -17,6 +17,6 @@ router.get("/upcoming", followupController.getUpcomingFollowups);
 router.get("/lead/:leadId", followupController.getFollowupsByLead);
 
 // Update follow-up
-router.patch("/:id", followupController.updateFollowup);
+router.patch("/updatefollowup/:id", followupController.updateFollowup);
 
 export default router;

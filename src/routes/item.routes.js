@@ -8,18 +8,18 @@ const router = Router();
 router.use(verifyJWT);
 
 // Create item
-router.post("/", itemController.createItem);
+router.post("/createitem", itemController.createItem);
 
 // Get all items
-router.get("/", itemController.getAllItems);
+router.get("/getallitems", itemController.getAllItems);
 
 // Get item by ID
-router.get("/:id", itemController.getItemById);
+router.get("/getitembyid/:id", itemController.getItemById);
 
 // Update item
-router.patch("/:id", itemController.updateItem);
+router.patch("/updateitem/:id", itemController.updateItem);
 
 // Delete item
-router.delete("/:id", itemController.deleteItem);
+router.delete("/deleteitem/:id", itemController.deleteItem);
 
 export default router;

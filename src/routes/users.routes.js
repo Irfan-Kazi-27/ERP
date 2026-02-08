@@ -27,7 +27,7 @@ router.patch("/update-current-user", verifyJWT, updateCurrentUser)
 router.delete("/delete-current-user", verifyJWT, deleteCurrentUser)
 
 // Admin/Moderator Routes (Example: restrict getAllUsers to admin)
-router.get("/get-all-users", verifyJWT, authorizeRoles("ADMIN", "SUPER_ADMIN", "SUB_ADMIN"), getAllUsers)
+router.get("/get-all-users", verifyJWT, authorizeRoles("ADMIN", "SUPER_ADMIN", "SUB_ADMIN", "STAFF"), getAllUsers)
 
 // Specific ID Routes
 router.get("/get-user-by-id/:id", verifyJWT, getUserById)

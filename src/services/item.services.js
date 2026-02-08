@@ -31,7 +31,7 @@ export const updateItem = async (itemId, updateData) => {
         if (updateData.name) item.name = updateData.name;
         if (updateData.description) item.description = updateData.description;
         if (updateData.basePrice) item.basePrice = updateData.basePrice;
-        if (updateData.unit) item.unit = updateData.unit;
+        // if (updateData.unit) item.unit = updateData.unit;
 
         await item.save();
         return item;

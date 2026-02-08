@@ -6,20 +6,18 @@ const leadSchema = new mongoose.Schema(
       type: Date,
       default: Date.now
     },
-    leadNo:{
-      type:String,
-      required:true
+    leadNo: {
+      type: String,
+      required: true
     },
     customer: {
-      name:{type:String,required:true},
-      contact:{type:String,required:true},
-      email:{type:String,required:true},
-      companyName:{type:String,required:true},
-      address:{type:String,required:true}
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Party",
+      required: true
     },
     source: {
       type: String,
-      enum: ["WHATSAPP", "EMAIL", "REFERRAL", "WEBSITE","CALL", "OTHER" ],
+      enum: ["WHATSAPP", "EMAIL", "REFERRAL", "WEBSITE", "CALL", "OTHER"],
       required: true
     },
 
@@ -27,32 +25,37 @@ const leadSchema = new mongoose.Schema(
       type: String,
       enum: [
         "NEW",
-        "APPROVED",
         "REJECTED",
         "ASSIGNED",
+        "CONTACTED",
+        "QUALIFIED",
+        "QUOTATION_SENT",
         "FOLLOW_UP",
-        "CLIENT_APPROVAL_PENDING",
-        "APPROVED_BY_CLIENT",
-        "CONVERTED_TO_ORDER"
+        "LOST"
       ],
       default: "NEW"
     },
-    interestedIn:[{
-      item:{
+    interestedIn: [{
+      item: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Item",
         required: true
+      },
+      quantity: {
+        type: Number,
+        required: true,
+        min: [1, 'Quantity must be at least 1']
       }
     }],
-    assignedTo:{
+    assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User"
     },
-    reviewedBy:{
+    reviewedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User"
     },
-    reviewedAt:{
+    reviewedAt: {
       type: Date
     },
     remarks: {
@@ -70,25 +73,25 @@ const leadSchema = new mongoose.Schema(
       default: true
     },
     assignmentHistory: [{
-    assignedTo:{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true
-    },
-    assignedBy:{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true
-    },
-    assignedAt:{
-      type: Date,
-      default: Date.now
-    },
-    reason:{
-      type: String,
-      trim: true
-    }
-  }]
+      assignedTo: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+      },
+      assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true
+      },
+      assignedAt: {
+        type: Date,
+        default: Date.now
+      },
+      reason: {
+        type: String,
+        trim: true
+      }
+    }]
   },
   {
     timestamps: true
