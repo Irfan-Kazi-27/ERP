@@ -7,11 +7,11 @@ const quotationSchema = new mongoose.Schema(
             ref: "Lead",
             required: true
         },
-        quotationNo:{
-            type:String,
-            required:true
+        quotationNo: {
+            type: String,
+            required: true
         },
-        salesPersonId:{
+        salesPersonId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "User",
             required: true
@@ -20,63 +20,69 @@ const quotationSchema = new mongoose.Schema(
             type: Date,
             default: Date.now
         },
-        quotationItems:[{
-            itemId:{
+        quotationItems: [{
+            itemId: {
                 type: mongoose.Schema.Types.ObjectId,
                 ref: "Item",
                 required: true
             },
-            quantity:{
+            quantity: {
                 type: Number,
                 required: true
             },
-            UnitPrice:{
+            UnitPrice: {
                 type: Number,
                 required: true
             },
-            Total:{
+            Total: {
                 type: Number,
                 required: true
             }
         }],
-        additionalCharges:[{
-            title:{type:String,required:true},
-            type:{type:String,enum:["Fixed","Percentage"]},
-            value:{type:Number,required:true},
-            amount:{type:Number,required:true}
+        additionalCharges: [{
+            title: { type: String, required: true },
+            type: { type: String, enum: ["Fixed", "Percentage"] },
+            value: { type: Number, required: true },
+            amount: { type: Number, required: true }
         }],
-        discount:{
-            type:{type:String,enum:["Fixed","Percentage"]},
-            value:{type:Number,required:true},
-            amount:{type:Number,required:true}
+        discount: {
+            type: { type: String, enum: ["Fixed", "Percentage"] },
+            value: { type: Number },
+            amount: { type: Number }
         },
-        tax:{
-            type:{type:String,enum:["GST","OTHER"]},
-            percentage:{type:Number,required:true},
-            amount:{type:Number,required:true}
+        tax: {
+            type: { type: String, enum: ["GST", "OTHER"] },
+            percentage: { type: Number },
+            amount: { type: Number }
         },
         status: {
             type: String,
             enum: ["CREATED", "SENT", "APPROVED", "REJECTED"],
-            required: true
+            default: "CREATED"
         },
         totalAmount: {
             type: Number,
             required: true
         },
-        notes:{
-            type:String,
-            trim:true
+        notes: {
+            type: String,
+            trim: true
         },
-        validTill:{
-            type:Date,
-            required:true
+        validTill: {
+            type: Date,
+            required: true
         },
+        emailSentAt: {
+            type: Date
+        },
+        emailSentTo: {
+            type: String
+        }
     },
     {
-        collection: "quotations"
-    },
-    {timestamps:true}
+        collection: "quotations",
+        timestamps: true
+    }
 );
 
 export const Quotation = mongoose.model("Quotation", quotationSchema);

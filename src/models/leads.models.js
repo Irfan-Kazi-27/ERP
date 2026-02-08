@@ -37,7 +37,7 @@ const leadSchema = new mongoose.Schema(
       ],
       default: "NEW"
     },
-    IntrestedIn:[{
+    interestedIn:[{
       item:{
         type: mongoose.Schema.Types.ObjectId,
         ref: "Item",
@@ -46,8 +46,14 @@ const leadSchema = new mongoose.Schema(
     }],
     assignedTo:{
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true
+      ref: "User"
+    },
+    reviewedBy:{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User"
+    },
+    reviewedAt:{
+      type: Date
     },
     remarks: {
       type: String,
